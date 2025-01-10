@@ -42,10 +42,10 @@ Rank sums are computed as ordinal transformations across subspaces defined by pa
 
 ```plaintext
 .
-├── data/       # Raw dataset files
+├── data/                             # Raw dataset files
 ├── src/
 │   ├── discriminability.py           # Discriminability implementation
 │   ├── fingerprinting.py             # Fingerprinting implementation
 │   ├── rank_sums.py                  # Rank sums implementation
 ├── analysis_results/                 # Numerical results
-├── README.md            # This file
+├── README.md            
