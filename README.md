@@ -2,7 +2,7 @@
 
 ## Abstract
 
-This repository encompasses the full implementation of advanced statistical methodologies focused on quantifying and analyzing repeatability metrics within high-dimensional datasets. Grounded in the framework proposed by Zeyi Wang et al. (2020), the project operationalizes discriminability measures, rank-based metrics, and permutation-driven hypothesis testing across diverse dataset configurations. The objective is to elucidate systemic patterns in data reproducibility while optimizing preprocessing pipelines and benchmarking robustness under extreme conditions.
+This repository encompasses the full implementation of advanced statistical methodologies focused on quantifying and analyzing repeatability metrics within high-dimensional datasets. Grounded in the framework proposed by Zeyi Wang et al. (2020), the project uses discriminability measures, rank-based metrics, and permutation-driven hypothesis testing across diverse dataset configurations. The objective is to use systemic patterns in data reproducibility while optimizing preprocessing pipelines and benchmarking robustness under extreme conditions.
 
 ---
 
