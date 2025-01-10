@@ -1,92 +1,37 @@
 # Statistical-Repeatability-Analysis
 
-## Overview
+## Abstract
 
-This repository implements and analyzes statistical repeatability measures inspired by the methodologies in **"Statistical Analysis of Data Repeatability Measures"** by Zeyi Wang et al. The project applies advanced repeatability measures, including discriminability, fingerprinting, and rank sums, to a novel dataset. The analysis provides actionable insights for data repeatability in high-dimensional and multivariate settings, forming the basis for a forthcoming research paper.
-
----
-
-## Objectives
-
-1. **Replication and Validation**:
-   - Reproduce the statistical methods described in the referenced paper.
-   - Validate their effectiveness on a different dataset.
-
-2. **Evaluation**:
-   - Compare the robustness of discriminability, rank sums, and fingerprinting under various dataset conditions, including noise and batch effects.
-
-3. **Application**:
-   - Leverage repeatability measures to optimize preprocessing pipelines and inform best practices in data acquisition.
+This repository encompasses the full implementation of advanced statistical methodologies focused on quantifying and analyzing repeatability metrics within high-dimensional datasets. Grounded in the framework proposed by Zeyi Wang et al. (2020), the project operationalizes discriminability measures, rank-based metrics, and permutation-driven hypothesis testing across diverse dataset configurations. The objective is to elucidate systemic patterns in data reproducibility while optimizing preprocessing pipelines and benchmarking robustness under extreme conditions.
 
 ---
 
-## Methodologies
+## Scope of Work
 
-### Intraclass Correlation Coefficient (ICC)
+1. **Methodological Replication**: 
+   - Deploy rigorous statistical measures derived from multivariate and nonparametric methodologies.
+   - Validate the theoretical underpinnings of discriminability, fingerprinting, and rank sums in empirical contexts.
 
-The intraclass correlation coefficient (ICC) is defined as:
-$$
-\text{ICC} = \frac{\sigma^2_\mu}{\sigma^2_\mu + \sigma^2}
-$$
-where:
-- \( \sigma^2_\mu \) represents inter-subject variance.
-- \( \sigma^2 \) represents intra-subject variance.
+2. **Metric Evaluation**:
+   - Examine interdependencies between repeatability statistics and their computational convergence properties.
+   - Explore boundary cases (e.g., Gaussian assumptions, batch effects).
 
-For multivariate data, ICC generalizes to:
-$$
-\Lambda = \frac{\det(\Sigma_\mu)}{\det(\Sigma_\mu) + \det(\Sigma)}
-$$
-where \( \Sigma_\mu \) and \( \Sigma \) are inter- and intra-subject covariance matrices, respectively.
+3. **Augmented Applications**:
+   - Extend statistical metrics to accommodate scaling challenges and batch-level data perturbations.
+   - Provide actionable insights for repeatability optimization in functional data pipelines.
 
 ---
 
-### Discriminability
+## Technical Implementations
 
-Discriminability quantifies the ability to distinguish repeated measurements of the same subject:
-$$
-D = P\left(\delta_{i,t,t'} < \delta_{i,i',t,t''}; \, \forall i \neq i'\right)
-$$
-where:
-- \( \delta \) is a distance metric.
-- \( t, t' \) are measurement indices.
+### 1. **Discriminability Analysis**
+The discriminability metric encapsulates a probabilistic framework for evaluating intersubject repeatability. Its computation leverages multi-level nested permutations and nonparametric rank assignments across multivariate embeddings. Specific emphasis is placed on resolving computational bottlenecks in \(O(n^3)\) scaling scenarios.
 
-The sample discriminability estimator is:
-$$
-\hat{D} = \frac{1}{n \cdot s \cdot (s - 1) \cdot (n - 1) \cdot s} \sum_{i=1}^n \sum_{t=1}^s \sum_{t' \neq t} \sum_{i' \neq i} \sum_{t''=1}^s I(\delta_{i,t,t'} < \delta_{i,i',t,t''})
-$$
+### 2. **Fingerprinting Metrics**
+Fingerprint indices operationalize a pairwise comparison methodology, emphasizing probabilistic alignment in subject-specific feature subspaces. Advanced matching heuristics ensure robustness to dimensionality reduction artifacts.
 
----
-
-### Fingerprinting
-
-Fingerprinting identifies the proportion of correct subject matches in repeated measurements:
-$$
-\text{Fingerprint Index} = \frac{1}{n} \sum_{i=1}^n I\left(\delta_{i,1,2} < \min_{i' \neq i} \delta_{i,i',1,2}\right)
-$$
-
----
-
-### Rank Sums
-
-Rank sums extend fingerprinting by incorporating the ranks of distances:
-$$
-R_n = \sum_{i=1}^n \text{rank}\left(\delta_{i,1,2}\right)
-$$
-This measure is robust to batch effects and non-Gaussian noise.
-
----
-
-### Batch Effects
-
-The analysis accounts for two types of batch effects:
-1. **Mean shifts**:
-   $$
-   \mu_{i,t} = \mu_{i,1} + t, \quad t > 1
-   $$
-2. **Scaling effects**:
-   $$
-   e_{i,t} \sim \mathcal{N}(0, t \cdot \sigma^2)
-   $$
+### 3. **Rank-Based Summation Techniques**
+Rank sums are computed as ordinal transformations across subspaces defined by pairwise proximity matrices. This method introduces asymptotically unbiased estimators for batch-invariant evaluations.
 
 ---
 
