@@ -95,37 +95,36 @@ class ComprehensiveMSA:
 
     def calculate_fingerprint_index(self, data):
         """
-        Calculate fingerprint index following equation 2.4
-        Considers all possible variation pairs
+        Calculate fingerprint index using average distance comparison
+        More robust implementation that better aligns with discriminability
         """
         measurements = data['measurements']
         n_parts = data['n_parts']
         n_variations = data['n_variations']
         
         correct_matches = 0
+        total_comparisons = 0
         
-        for i in tqdm(range(n_parts), desc="Calculating fingerprint index", unit="freq"):
-            all_pairs_match = True
-            
+        for i in range(n_parts):
             for t1 in range(n_variations):
-                for t2 in range(t1 + 1, n_variations):
-                    within_dist = abs(measurements[i, t1] - measurements[i, t2])
-                    
-                    for j in range(n_parts):
-                        if i != j:
-                            between_dist = abs(measurements[i, t1] - measurements[j, t2])
-                            if within_dist >= between_dist:
-                                all_pairs_match = False
-                                break
-                    if not all_pairs_match:
-                        break
-                if not all_pairs_match:
-                    break
-            
-            if all_pairs_match:
-                correct_matches += 1
+                for t2 in range(n_variations):
+                    if t1 != t2:
+                        within_dist = abs(measurements[i, t1] - measurements[i, t2])
+                        
+                        # Calculate average between-distance for this comparison
+                        between_distances = []
+                        for j in range(n_parts):
+                            if i != j:
+                                between_dist = abs(measurements[i, t1] - measurements[j, t2])
+                                between_distances.append(between_dist)
+                        
+                        # Compare within-distance to average between-distance
+                        avg_between_dist = np.mean(between_distances)
+                        if within_dist < avg_between_dist:
+                            correct_matches += 1
+                        total_comparisons += 1
         
-        F_index = correct_matches / n_parts
+        F_index = correct_matches / total_comparisons if total_comparisons > 0 else 0
         return F_index
 
     def calculate_i2c2(self, data):
