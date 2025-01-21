@@ -95,36 +95,37 @@ class ComprehensiveMSA:
 
     def calculate_fingerprint_index(self, data):
         """
-        Calculate fingerprint index using average distance comparison
-        More robust implementation that better aligns with discriminability
+        Calculate fingerprint index following Equation 2.3 and 2.4 from the paper
+        F_index = P(δ_i,1,2 < δ_i,i',1,2; ∀ i' ≠ i)
+        F̂_index = Tn/n where Tn is number of correct matches
         """
         measurements = data['measurements']
         n_parts = data['n_parts']
-        n_variations = data['n_variations']
         
+        # We'll use first two measurements for each subject as per paper definition
         correct_matches = 0
-        total_comparisons = 0
         
         for i in range(n_parts):
-            for t1 in range(n_variations):
-                for t2 in range(n_variations):
-                    if t1 != t2:
-                        within_dist = abs(measurements[i, t1] - measurements[i, t2])
-                        
-                        # Calculate average between-distance for this comparison
-                        between_distances = []
-                        for j in range(n_parts):
-                            if i != j:
-                                between_dist = abs(measurements[i, t1] - measurements[j, t2])
-                                between_distances.append(between_dist)
-                        
-                        # Compare within-distance to average between-distance
-                        avg_between_dist = np.mean(between_distances)
-                        if within_dist < avg_between_dist:
-                            correct_matches += 1
-                        total_comparisons += 1
+            # Calculate within-subject distance (δ_i,1,2)
+            within_dist = abs(measurements[i, 0] - measurements[i, 1])
+            
+            # Check against all other subjects
+            is_match = True
+            for i_prime in range(n_parts):
+                if i_prime != i:
+                    # Calculate between-subject distance (δ_i,i',1,2)
+                    between_dist = abs(measurements[i, 0] - measurements[i_prime, 1])
+                    
+                    # If any between-distance is smaller or equal, this is not a match
+                    if within_dist >= between_dist:
+                        is_match = False
+                        break
+            
+            if is_match:
+                correct_matches += 1
         
-        F_index = correct_matches / total_comparisons if total_comparisons > 0 else 0
+        # F̂_index = Tn/n
+        F_index = correct_matches / n_parts
         return F_index
 
     def calculate_i2c2(self, data):
