@@ -24,6 +24,7 @@ from scipy import stats
 import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
+from math import sqrt
 
 warnings.filterwarnings('ignore')
 
@@ -62,7 +63,7 @@ class ComprehensiveMSA:
     def calculate_discriminability(self, data):
         """
         Calculate discriminability using equation 3.2 from paper
-        Uses batch processing for memory efficiency
+        Memory-optimized version with smaller batches and better cleanup
         """
         measurements = data['measurements']
         n_parts = data['n_parts']
@@ -71,24 +72,49 @@ class ComprehensiveMSA:
         discriminability_sum = 0
         total_comparisons = 0
         
-        batch_size = 100
+        # Further reduce batch size for memory efficiency
+        batch_size = 25  # Reduced from 50
         n_batches = (n_parts + batch_size - 1) // batch_size
         
-        for batch_idx in tqdm(range(n_batches), desc="Calculating discriminability", unit="batch"):
-            start_idx = batch_idx * batch_size
-            end_idx = min((batch_idx + 1) * batch_size, n_parts)
+        try:
+            for batch_idx in tqdm(range(n_batches), desc="Calculating discriminability", unit="batch"):
+                start_idx = batch_idx * batch_size
+                end_idx = min((batch_idx + 1) * batch_size, n_parts)
+                batch_size_actual = end_idx - start_idx
+                
+                # Process each part in the batch individually to reduce memory usage
+                for i in range(batch_size_actual):
+                    current_part_idx = start_idx + i
+                    
+                    # Calculate within-distances for current part
+                    for t1 in range(n_variations):
+                        for t2 in range(t1 + 1, n_variations):
+                            within_dist = abs(
+                                measurements[current_part_idx, t1] - 
+                                measurements[current_part_idx, t2]
+                            )
+                            
+                            # Compare with other parts immediately
+                            for j in range(n_parts):
+                                if j != current_part_idx:
+                                    between_dist = abs(
+                                        measurements[current_part_idx, t1] - 
+                                        measurements[j, t2]
+                                    )
+                                    if within_dist < between_dist:
+                                        discriminability_sum += 1
+                                    total_comparisons += 1
+                
+                # Force garbage collection after each batch
+                import gc
+                gc.collect()
             
-            for i in range(start_idx, end_idx):
-                for t1 in range(n_variations):
-                    for t2 in range(t1 + 1, n_variations):
-                        within_dist = abs(measurements[i, t1] - measurements[i, t2])
-                        
-                        for j in range(n_parts):
-                            if i != j:
-                                between_dist = abs(measurements[i, t1] - measurements[j, t2])
-                                if within_dist < between_dist:
-                                    discriminability_sum += 1
-                                total_comparisons += 1
+        except Exception as e:
+            print(f"Error during discriminability calculation: {str(e)}")
+            raise
+        finally:
+            # Ensure proper cleanup
+            gc.collect()
         
         D_hat = discriminability_sum / total_comparisons if total_comparisons > 0 else 0
         return D_hat
@@ -129,41 +155,74 @@ class ComprehensiveMSA:
         return F_index
 
     def calculate_i2c2(self, data):
-        """Calculate I2C2 using trace-based method"""
         measurements = data['measurements']
+        n_parts = data['n_parts']
+        n_variations = data['n_variations']
         
-        total_cov = np.cov(measurements.T)
+        # Add small epsilon to avoid division by zero
+        epsilon = 1e-6
         
-        within_cov = np.zeros_like(total_cov)
-        for i in range(data['n_parts']):
-            within_cov += np.cov(measurements[i, :].reshape(-1, 1))
-        within_cov /= data['n_parts']
+        # Calculate grand mean
+        grand_mean = np.mean(measurements)
         
-        tr_total = np.trace(total_cov)
-        tr_within = np.trace(within_cov)
+        # Calculate between-subject covariance (Σ_μ)
+        subject_means = np.mean(measurements, axis=1)
+        between_ss = np.sum((subject_means - grand_mean)**2) * n_variations
+        tr_between = between_ss / (n_parts - 1 + epsilon)  # Convert to variance
         
-        i2c2 = (tr_total - tr_within) / tr_total
-        return i2c2
+        # Calculate within-subject covariance (Σ)
+        within_ss = np.sum((measurements - subject_means[:, np.newaxis])**2)
+        tr_within = within_ss / (n_parts * (n_variations - 1) + epsilon)  # Convert to variance
+        
+        # Calculate I2C2 using paper formula with epsilon
+        i2c2 = (tr_between + epsilon) / (tr_between + tr_within + 2*epsilon)
+        
+        return max(0, min(1, i2c2))  # Bound between 0 and 1
 
     def calculate_rank_sum(self, data):
-        """Calculate rank sum following equation 2.5"""
+        """
+        Calculate rank sum following equation 2.5
+        R_n = sum of ranks of within-subject distances
+        Transformed to scale [0,1] where higher is better
+        """
         measurements = data['measurements']
         n_parts = data['n_parts']
         
-        distances = squareform(pdist(measurements))
-        rank_sum = 0
-        total_pairs = 0
+        within_distances = []
+        between_distances = []
         
-        for i in tqdm(range(n_parts), desc="Calculating rank sum", unit="freq"):
+        # Calculate within and between distances
+        for i in range(n_parts):
+            # Within-subject distances
+            within_dist = abs(measurements[i, 0] - measurements[i, 1])
+            within_distances.append((within_dist, i))
+            
+            # Between-subject distances
             for j in range(n_parts):
                 if i != j:
-                    rank = np.where(np.argsort(distances[i]) == j)[0][0] + 1
-                    rank_sum += rank
-                    total_pairs += 1
+                    between_dist = abs(measurements[i, 0] - measurements[j, 1])
+                    between_distances.append((between_dist, (i, j)))
         
-        # Transform to match scale of other metrics
-        rank_metric = 1 - (rank_sum / (total_pairs * n_parts))
-        return rank_metric
+        # Combine all distances and sort
+        all_distances = within_distances + between_distances
+        all_distances.sort(key=lambda x: x[0])
+        
+        # Calculate ranks for within-subject distances
+        rank_sum = 0
+        n_total = len(all_distances)
+        
+        for rank, (dist, idx) in enumerate(all_distances, 1):
+            if isinstance(idx, int):  # This is a within-subject distance
+                rank_sum += rank
+        
+        # Transform to [0,1] scale where higher values indicate better repeatability
+        max_rank_sum = n_parts * n_total
+        min_rank_sum = n_parts * (n_parts + 1) / 2
+        
+        normalized_rank = 1 - ((rank_sum - min_rank_sum) / 
+                              (max_rank_sum - min_rank_sum))
+        
+        return normalized_rank
 
     def calculate_icc(self, data):
         """Calculate ICC using one-way ANOVA model"""
@@ -194,6 +253,62 @@ class ComprehensiveMSA:
             return "Good"
         else:
             return "Excellent"
+
+    def calculate_gage_rnr(self, data):
+        """
+        Calculate Gage R&R statistics using actual measurements from dataset
+        with improved scaling and robustness
+        """
+        measurements = data['measurements']
+        n_parts = data['n_parts']
+        n_variations = data['n_variations']
+        
+        # Calculate Repeatability (EV) using range method
+        ranges = np.ptp(measurements, axis=1)  # Range for each part
+        EV = np.mean(ranges) / 2.0  # Using d2* = 2 for typical range normalization
+        
+        # Calculate Reproducibility (AV) using operator/variation differences
+        variation_means = np.mean(measurements, axis=0)
+        operator_range = np.ptp(variation_means)
+        AV = operator_range / (n_variations ** 0.5)  # Scale by sqrt of variations
+        
+        # Calculate Gage R&R
+        GRR = np.sqrt(EV**2 + AV**2)
+        
+        # Calculate Part-to-Part Variation (PV)
+        part_means = np.mean(measurements, axis=1)
+        part_range = np.ptp(part_means)
+        PV = part_range / (n_parts ** 0.5)  # Scale by sqrt of parts
+        
+        # Calculate Total Variation (TV)
+        TV = np.sqrt(GRR**2 + PV**2)
+        
+        # Ensure non-zero total variation to avoid division by zero
+        if TV < 1e-10:
+            TV = 1e-10
+        
+        # Calculate Percentage Contributions
+        EV_percent = 100 * (EV / TV)
+        AV_percent = 100 * (AV / TV)
+        GRR_percent = 100 * (GRR / TV)
+        PV_percent = 100 * (PV / TV)
+        
+        # Calculate Number of Distinct Categories (ndc)
+        # Using more conservative formula
+        ndc = int(np.floor(sqrt(2) * PV / GRR)) if GRR > 0 else float('inf')
+        
+        return {
+            'EV': EV,
+            'AV': AV,
+            'GRR': GRR,
+            'PV': PV,
+            'TV': TV,
+            'EV_percent': EV_percent,
+            'AV_percent': AV_percent,
+            'GRR_percent': GRR_percent,
+            'PV_percent': PV_percent,
+            'ndc': ndc
+        }
 
     def visualize_results(self, save_prefix='analysis'):
         """Create comprehensive visualizations following paper examples"""
@@ -307,6 +422,10 @@ class ComprehensiveMSA:
                 'n_variations': data['n_variations']
             }
             
+            # Add Gage R&R results
+            gage_results = self.calculate_gage_rnr(data)
+            results.update(gage_results)
+            
             self.results[data['file_name']] = results
             
             print(f"\nResults for {data['file_name']}:")
@@ -316,12 +435,31 @@ class ComprehensiveMSA:
             print(f"Rank Sum: {results['rank_sum']:.4f}")
             print(f"ICC: {results['icc']:.4f}")
             print(f"ICC Interpretation: {self.get_icc_interpretation(results['icc'])}")
+            print("\nGage R&R Results:")
+            print(f"Repeatability (EV): {results['EV']:.6f} ({results['EV_percent']:.1f}%)")
+            print(f"Reproducibility (AV): {results['AV']:.6f} ({results['AV_percent']:.1f}%)")
+            print(f"Gage R&R: {results['GRR']:.6f} ({results['GRR_percent']:.1f}%)")
+            print(f"Part-to-Part Variation: {results['PV']:.6f} ({results['PV_percent']:.1f}%)")
+            print(f"Number of Distinct Categories: {results['ndc']:.1f}")
             
             return results
             
         except Exception as e:
             print(f"Error during analysis: {str(e)}")
             raise
+
+    def __del__(self):
+        """Cleanup method to ensure proper resource handling"""
+        try:
+            # Clear any stored results
+            self.results.clear()
+            
+            # Force garbage collection
+            import gc
+            gc.collect()
+            
+        except Exception:
+            pass
 
 def main():
     analyzer = ComprehensiveMSA()
