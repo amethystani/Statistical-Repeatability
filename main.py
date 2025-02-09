@@ -32,6 +32,7 @@ class ComprehensiveMSA:
     def __init__(self):
         """Initialize comprehensive measurement system analysis"""
         self.results = {}
+        self.gaussian_assumption = True  # Add this flag
         
     def load_data(self, filepath):
         """
@@ -461,9 +462,113 @@ class ComprehensiveMSA:
         except Exception:
             pass
 
+    def simulate_power_curves(self, n_range=(5, 40), n_iterations=1000, sigma_sq=5, sigma_mu_sq=3):
+        """
+        Simulate power curves for different measurement methods
+        
+        Parameters:
+        - n_range: tuple of (min_subjects, max_subjects)
+        - n_iterations: number of simulation iterations
+        - sigma_sq: within-subject variance
+        - sigma_mu_sq: between-subject variance
+        """
+        n_subjects = np.arange(n_range[0], n_range[1] + 1, 5)
+        n_variations = 2  # Fixed number of variations per subject
+        
+        # Initialize power results dictionary
+        power_results = {
+            'Discriminability': np.zeros(len(n_subjects)),
+            'Rank Sums': np.zeros(len(n_subjects)),
+            'Fingerprint': np.zeros(len(n_subjects)),
+            'I2C2': np.zeros(len(n_subjects)),  # Added I2C2
+            'ICC (F-test)': np.zeros(len(n_subjects)),
+            'ICC (permutation)': np.zeros(len(n_subjects))
+        }
+        
+        for i, n in enumerate(tqdm(n_subjects, desc="Simulating power curves")):
+            significant_counts = {method: 0 for method in power_results.keys()}
+            
+            for _ in range(n_iterations):
+                # Generate true subject effects
+                true_effects = np.random.normal(0, np.sqrt(sigma_mu_sq), n)
+                
+                # Generate measurements with noise
+                measurements = np.zeros((n, n_variations))
+                for j in range(n):
+                    # Add subject effect and measurement noise
+                    measurements[j] = true_effects[j] + np.random.normal(0, np.sqrt(sigma_sq), n_variations)
+                
+                # For non-Gaussian case (right plot)
+                if not self.gaussian_assumption:
+                    measurements = np.exp(measurements)  # Log transformation
+                
+                # Create data dictionary
+                sim_data = {
+                    'measurements': measurements,
+                    'n_parts': n,
+                    'n_variations': n_variations
+                }
+                
+                # Calculate test statistics
+                d_hat = self.calculate_discriminability(sim_data)
+                rank_sum = self.calculate_rank_sum(sim_data)
+                f_index = self.calculate_fingerprint_index(sim_data)
+                i2c2 = self.calculate_i2c2(sim_data)  # Added I2C2 calculation
+                icc = self.calculate_icc(sim_data)
+                
+                # Perform significance tests (α = 0.05)
+                significant_counts['Discriminability'] += (d_hat > 0.5)
+                significant_counts['Rank Sums'] += (rank_sum > 0.5)
+                significant_counts['Fingerprint'] += (f_index > 1/n)
+                significant_counts['I2C2'] += (i2c2 > 0.5)  # Added I2C2 threshold
+                
+                # F-test for ICC
+                f_stat = (1 + (n_variations-1)*icc)/(1-icc)
+                f_crit = stats.f.ppf(0.95, n-1, n*(n_variations-1))
+                significant_counts['ICC (F-test)'] += (f_stat > f_crit)
+                
+                # Permutation test for ICC
+                n_perms = 100
+                perm_iccs = []
+                for _ in range(n_perms):
+                    perm_measurements = np.random.permutation(measurements.flatten()).reshape(n, n_variations)
+                    perm_data = {**sim_data, 'measurements': perm_measurements}
+                    perm_iccs.append(self.calculate_icc(perm_data))
+                significant_counts['ICC (permutation)'] += (icc > np.percentile(perm_iccs, 95))
+            
+            # Calculate power for each method
+            for method in power_results:
+                power_results[method][i] = significant_counts[method] / n_iterations
+        
+        # Plot power curves
+        plt.figure(figsize=(15, 6))
+        
+        # Create two subplots for Gaussian and non-Gaussian cases
+        for idx, assumption in enumerate(['Gaussian', 'Non-Gaussian']):
+            plt.subplot(1, 2, idx+1)
+            
+            for method, power in power_results.items():
+                if 'ICC' in method:
+                    plt.plot(n_subjects, power, '--', label=method)
+                else:
+                    plt.plot(n_subjects, power, '-', label=method)
+            
+            plt.xlabel('Number of Subjects')
+            plt.ylabel('Power')
+            plt.title(f'Power Analysis ({assumption} Assumption)')
+            plt.grid(True)
+            if idx == 1:
+                plt.legend(title='Type of Test', bbox_to_anchor=(1.05, 1), loc='upper left')
+            plt.ylim(0, 1)
+        
+        plt.tight_layout()
+        plt.savefig('power_analysis.png', bbox_inches='tight', dpi=300)
+        plt.close()
+
 def main():
     analyzer = ComprehensiveMSA()
     
+    # Regular analysis
     files = [
         'Project Details (1).xlsx',
         'Project Details (2).xlsx',
@@ -482,9 +587,20 @@ def main():
             print(f"Error: {str(e)}")
             continue
     
-    # Create visualization
+    # Create visualizations
     analyzer.visualize_results()
-    print("\nAnalysis complete. Visualization saved as 'method_comparison.png'")
+    
+    # Generate power curves for both Gaussian and non-Gaussian cases
+    print("\nGenerating power analysis curves...")
+    print("Using subject range from actual data...")
+    
+    analyzer.gaussian_assumption = True
+    analyzer.simulate_power_curves()
+    
+    analyzer.gaussian_assumption = False
+    analyzer.simulate_power_curves()
+    
+    print("\nAnalysis complete. Visualizations saved.")
 
 if __name__ == "__main__":
     main()
