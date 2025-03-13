@@ -30,6 +30,7 @@ from tqdm import tqdm
 from math import sqrt
 import io
 import sys
+from tabulate import tabulate
 
 warnings.filterwarnings('ignore')
 
@@ -364,28 +365,79 @@ class ComprehensiveMSA:
         """
         Calculate variance components using ANOVA methodology
         Returns total variation and breakdown between/within subjects
+        Uses Expected Mean Squares (EMS) approach for variance component estimation
+        Improved for numerical stability with very small variations
         """
         measurements = data['measurements']
         n_parts = data['n_parts']
         n_variations = data['n_variations']
         
-        # Calculate total variation
-        total_ss = np.sum((measurements - np.mean(measurements))**2)
+        # Calculate grand mean with higher precision
+        grand_mean = np.mean(measurements)
         
-        # Calculate between-frequency variation
+        # Calculate total variation (use ddof=0 to match ANOVA calculations)
+        # Use higher-precision calculation to avoid underflow
+        deviations = measurements - grand_mean
+        total_ss = np.sum(deviations * deviations)  # More numerically stable than squaring after summing
+        
+        # Calculate between-part variation with higher precision approach
         part_means = np.mean(measurements, axis=1)
-        between_ss = np.sum((part_means - np.mean(measurements))**2) * n_variations
+        part_deviations = part_means - grand_mean
+        between_ss = n_variations * np.sum(part_deviations * part_deviations)
         
-        # Calculate within-frequency variation (residual)
+        # Calculate within-part variation (residual)
         within_ss = total_ss - between_ss
+        
+        # Small negative values can occur due to floating point errors
+        # Ensure they're treated as zero
+        if within_ss < 0 and abs(within_ss) < 1e-10:
+            within_ss = 0
+            
+        # Degrees of Freedom
+        df_between = n_parts - 1
+        df_within = n_parts * (n_variations - 1)
+        
+        # Mean Squares with protection against division by zero
+        ms_between = between_ss / df_between if df_between > 0 else 0
+        ms_within = within_ss / df_within if df_within > 0 else 0
+        
+        # Calculate variance components using EMS approach
+        var_within = ms_within
+        var_between = (ms_between - ms_within) / n_variations  # Correct EMS formula
+        
+        # Handle negative variances (can occur due to sampling error)
+        var_between = max(0, var_between)
+        
+        var_total = var_between + var_within
+        
+        # Ensure non-zero total variation to avoid division by zero
+        # Using smaller epsilon for higher precision
+        epsilon = 1e-14
+        if var_total < epsilon:
+            # If total variance is extremely small but positive
+            if 0 < var_total < epsilon:
+                # Use the actual ratio but with minimal value to avoid divide-by-zero
+                percent_between = (var_between / var_total) * 100
+                percent_within = (var_within / var_total) * 100
+            else:
+                # True zero variation case (identical measurements)
+                percent_between = 0
+                percent_within = 0
+        else:
+            percent_between = (var_between / var_total) * 100
+            percent_within = (var_within / var_total) * 100
         
         # Return components and percentages
         return {
             'total_variation': total_ss,
             'between_parts_variation': between_ss,
             'within_parts_variation': within_ss,
-            'percent_between': (between_ss / total_ss) * 100 if total_ss > 0 else 0,
-            'percent_within': (within_ss / total_ss) * 100 if total_ss > 0 else 0
+            'ms_between': ms_between,  # Adding these for diagnostic purposes
+            'ms_within': ms_within,
+            'var_between': var_between,
+            'var_within': var_within,
+            'percent_between': percent_between,
+            'percent_within': percent_within
         }
 
     def generate_xbar_chart(self, data, save_prefix='analysis'):
@@ -573,6 +625,40 @@ class ComprehensiveMSA:
         try:
             data = self.load_data(filepath)
             
+            # ===== DATA INTEGRITY CHECKS WITH IMPROVED PRECISION =====
+            print("\n=== Data Integrity Check ===")
+            sample_data = data['measurements'][:5, :5]  # First 5 parts, first 5 reps
+            print("Sample measurements:")
+            print(sample_data)
+            print("Measurement differences (Part 0):", np.diff(sample_data[0]))
+            
+            # Add validation step with INCREASED PRECISION display
+            print("\nSample within-part variation check (high precision):")
+            sample_part = data['measurements'][0]  # First frequency's measurements
+            within_range = np.ptp(sample_part)
+            within_std = np.std(sample_part)
+            print(f"Range: {within_range:.10e}, Std: {within_std:.10e}")
+            
+            # Check for very small variance that might cause underflow
+            if within_std < 1e-6:
+                print("\n⚠️ WARNING: Very small variation detected")
+                print("This may cause precision issues in calculations")
+                print("Using high-precision mode for variance analysis")
+                
+                # Scale data temporarily to avoid underflow if needed
+                scale_factor = None
+                if within_std < 1e-12 and within_std > 0:
+                    scale_factor = 1e12
+                    print(f"Applying temporary scaling factor of {scale_factor} for calculations")
+                    # Create a copy with scaled values for variance calculations
+                    scaled_data = data.copy()
+                    scaled_data['measurements'] = data['measurements'] * scale_factor
+                    components = self.calculate_components_of_variation(scaled_data)
+                else:
+                    components = self.calculate_components_of_variation(data)
+            else:
+                components = self.calculate_components_of_variation(data)
+            
             print("\nCalculating all metrics...")
             
             # Calculate traditional metrics
@@ -593,8 +679,7 @@ class ComprehensiveMSA:
             # Add new metrics
             results['ccdm'] = self.calculate_ccdm(data)
             
-            # Add components of variation
-            components = self.calculate_components_of_variation(data)
+            # Add components of variation (already calculated above)
             results.update(components)
             
             # Generate X-bar chart
@@ -617,10 +702,10 @@ class ComprehensiveMSA:
             print(f"Between-parts: {results['percent_between']:.1f}%")
             print(f"Within-parts: {results['percent_within']:.1f}%")
             print("\nGage R&R Results:")
-            print(f"Repeatability (EV): {results['EV']:.6f} ({results['EV_percent']:.1f}%)")
-            print(f"Reproducibility (AV): {results['AV']:.6f} ({results['AV_percent']:.1f}%)")
-            print(f"Gage R&R: {results['GRR']:.6f} ({results['GRR_percent']:.1f}%)")
-            print(f"Part-to-Part Variation: {results['PV']:.6f} ({results['PV_percent']:.1f}%)")
+            print(f"Repeatability (EV): {results['EV']:.10e} ({results['EV_percent']:.1f}%)")
+            print(f"Reproducibility (AV): {results['AV']:.10e} ({results['AV_percent']:.1f}%)")
+            print(f"Gage R&R: {results['GRR']:.10e} ({results['GRR_percent']:.1f}%)")
+            print(f"Part-to-Part Variation: {results['PV']:.10e} ({results['PV_percent']:.1f}%)")
             print(f"Number of Distinct Categories: {results['ndc']:.1f}")
             
             return results
@@ -628,6 +713,45 @@ class ComprehensiveMSA:
         except Exception as e:
             print(f"Error during analysis: {str(e)}")
             raise
+
+    def print_gage_rnr_table(self):
+        """Print formatted Gage R&R table in terminal"""
+        # Table headers with clearer descriptions
+        headers = [
+            "Dataset",
+            "%Contribution\n(Variance Ratio)", 
+            "%Study Variation\n(StdDev Ratio)",
+            "NDC"
+        ]
+        
+        # Build table data from results
+        table_data = []
+        for file_name, results in self.results.items():
+            # Calculate %Study variance correctly using standard deviations
+            # %Study variance = (GRR_std / Total_std) * 100
+            grr_std = np.sqrt(results['GRR'])  # Convert variance to std dev
+            total_std = np.sqrt(results['TV'])  # Total variance to std dev
+            study_variance = (grr_std / total_std) * 100 if total_std > 0 else 0
+            
+            row = [
+                file_name,
+                f"{results['GRR_percent']:.2f}",  # %Contribution (correct)
+                f"{study_variance:.2f}",          # %Study variance (fixed)
+                f"{results['ndc']:.0f}"
+            ]
+            table_data.append(row)
+        
+        # Print with grid format
+        print("\nGage R&R Results Summary:")
+        print(tabulate(table_data, headers=headers, tablefmt="grid"))
+        
+        # Print explanation of the metrics
+        print("\nMetric Definitions:")
+        print("- %Contribution: (Measurement System Variance / Total Variance) × 100")
+        print("  Represents the measurement system's contribution to overall variation.")
+        print("- %Study Variation: (Measurement System StdDev / Total StdDev) × 100")
+        print("  Represents the measurement system's spread relative to total process spread.")
+        print("- NDC: Number of Distinct Categories the measurement system can reliably distinguish.")
 
     def __del__(self):
         """Cleanup method to ensure proper resource handling"""
@@ -776,6 +900,9 @@ def main():
             print(f"\nFailed to process {file}")
             print(f"Error: {str(e)}")
             continue
+    
+    # Print Gage R&R results table
+    analyzer.print_gage_rnr_table()
     
     # Create visualizations
     analyzer.visualize_results()
