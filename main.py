@@ -7,6 +7,9 @@ Implements five different measurement methods:
 3. I2C2 (Image Intraclass Correlation Coefficient)
 4. Rank Sum Statistic - Equation 2.5
 5. ICC (Intraclass Correlation Coefficient)
+6. CCDM (Correlation Coefficient Deviation Metric)
+7. Components of Variation Visualization
+8. X-bar Charts
 
 Following methodology from the paper:
 'Statistical Analysis of Data Repeatability Measures'
@@ -323,11 +326,127 @@ class ComprehensiveMSA:
             'ndc': ndc
         }
 
+    def calculate_ccdm(self, data):
+        """
+        Calculate Correlation Coefficient Deviation Metric (CCDM)
+        Lower values indicate better measurement system correlation
+        """
+        measurements = data['measurements']
+        n_variations = data['n_variations']
+        
+        total_ccdm = 0
+        pairs = 0
+        
+        # Use first measurement as reference
+        reference = measurements[:, 0]
+        sigma_ref = np.std(reference)
+        
+        for rep in range(1, n_variations):
+            current = measurements[:, rep]
+            sigma_curr = np.std(current)
+            
+            # Skip if either standard deviation is zero (avoid division by zero)
+            if sigma_ref == 0 or sigma_curr == 0:
+                continue
+                
+            # Calculate covariance between reference and current measurement
+            covariance = np.cov(reference, current, ddof=0)[0, 1]
+            
+            # CCDM is 1 minus the correlation coefficient
+            ccdm = 1 - (covariance / (sigma_ref * sigma_curr))
+            total_ccdm += ccdm
+            pairs += 1
+            
+        # Return average CCDM across all pairs
+        return total_ccdm / pairs if pairs > 0 else 0
+
+    def calculate_components_of_variation(self, data):
+        """
+        Calculate variance components using ANOVA methodology
+        Returns total variation and breakdown between/within subjects
+        """
+        measurements = data['measurements']
+        n_parts = data['n_parts']
+        n_variations = data['n_variations']
+        
+        # Calculate total variation
+        total_ss = np.sum((measurements - np.mean(measurements))**2)
+        
+        # Calculate between-frequency variation
+        part_means = np.mean(measurements, axis=1)
+        between_ss = np.sum((part_means - np.mean(measurements))**2) * n_variations
+        
+        # Calculate within-frequency variation (residual)
+        within_ss = total_ss - between_ss
+        
+        # Return components and percentages
+        return {
+            'total_variation': total_ss,
+            'between_parts_variation': between_ss,
+            'within_parts_variation': within_ss,
+            'percent_between': (between_ss / total_ss) * 100 if total_ss > 0 else 0,
+            'percent_within': (within_ss / total_ss) * 100 if total_ss > 0 else 0
+        }
+
+    def generate_xbar_chart(self, data, save_prefix='analysis'):
+        """
+        Generate X-bar control chart for measurement means
+        Shows mean values with control limits at ±3 standard deviations
+        """
+        measurements = data['measurements']
+        n_variations = data['n_variations']
+        file_name = data['file_name']
+        
+        # Calculate means for each variation
+        means = np.mean(measurements, axis=0)
+        overall_mean = np.mean(means)
+        std_dev = np.std(means, ddof=1)
+        
+        # Create X-bar chart
+        plt.figure(figsize=(12, 6))
+        plt.plot(range(1, n_variations+1), means, 'bo-', label='Repetition Means')
+        plt.axhline(overall_mean, color='r', linestyle='--', label='Overall Mean')
+        plt.axhline(overall_mean + 3*std_dev, color='g', linestyle=':', label='UCL')
+        plt.axhline(overall_mean - 3*std_dev, color='g', linestyle=':', label='LCL')
+        
+        plt.title(f'X-bar Chart - {file_name}')
+        plt.xlabel('Repetition Number')
+        plt.ylabel('Mean Value')
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(f'{save_prefix}_{file_name}_xbar.png')
+        plt.close()
+        
+        return {'mean': overall_mean, 'ucl': overall_mean + 3*std_dev, 'lcl': overall_mean - 3*std_dev}
+
+    def visualize_components(self, data, save_prefix='analysis'):
+        """
+        Visualize components of variation as a pie chart
+        Shows breakdown between part-to-part and within-part variation
+        """
+        file_name = data['file_name']
+        components = self.calculate_components_of_variation(data)
+        
+        # Create labels and sizes for pie chart
+        labels = ['Between Parts', 'Within Parts']
+        sizes = [components['percent_between'], components['percent_within']]
+        
+        # Create pie chart
+        plt.figure(figsize=(8, 6))
+        plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90,
+                colors=['#ff9999','#66b3ff'])
+        plt.axis('equal')  # Equal aspect ratio ensures the pie is circular
+        plt.title(f'Components of Variation - {file_name}')
+        plt.savefig(f'{save_prefix}_{file_name}_components.png')
+        plt.close()
+        
+        return components
+
     def visualize_results(self, save_prefix='analysis'):
         """Create comprehensive visualizations following paper examples"""
         # 1. Method Comparison Plot
         plt.figure(figsize=(15, 10))
-        methods = ['Discriminability', 'Fingerprint', 'I2C2', 'Rank Sum', 'ICC']
+        methods = ['Discriminability', 'Fingerprint', 'I2C2', 'Rank Sum', 'ICC', 'CCDM']
         files = list(self.results.keys())
         
         values = {
@@ -335,7 +454,8 @@ class ComprehensiveMSA:
             'Fingerprint': [self.results[f]['fingerprint_index'] for f in files],
             'I2C2': [self.results[f]['i2c2'] for f in files],
             'Rank Sum': [self.results[f]['rank_sum'] for f in files],
-            'ICC': [self.results[f]['icc'] for f in files]
+            'ICC': [self.results[f]['icc'] for f in files],
+            'CCDM': [1 - self.results[f]['ccdm'] for f in files]  # Invert CCDM for consistency (higher = better)
         }
         
         # Create DataFrame for boxplot
@@ -418,6 +538,35 @@ class ComprehensiveMSA:
         plt.tight_layout()
         plt.savefig(f'{save_prefix}_performance.png')
         plt.close()
+        
+        # 5. Components of Variation Summary
+        plt.figure(figsize=(14, 8))
+        between_parts = [self.results[f]['percent_between'] for f in files]
+        within_parts = [self.results[f]['percent_within'] for f in files]
+        
+        # Create stacked bar chart
+        plt.bar(files, between_parts, label='Between Parts')
+        plt.bar(files, within_parts, bottom=between_parts, label='Within Parts')
+        
+        plt.xlabel('Files')
+        plt.ylabel('Percentage of Total Variation')
+        plt.title('Components of Variation Across Files')
+        plt.legend()
+        plt.xticks(rotation=45)
+        
+        plt.tight_layout()
+        plt.savefig(f'{save_prefix}_variance_components.png')
+        plt.close()
+        
+        # 6. Create variance components summary table
+        components_df = pd.DataFrame({
+            'file': files,
+            'between_parts_%': [self.results[f]['percent_between'] for f in files],
+            'within_parts_%': [self.results[f]['percent_within'] for f in files],
+            'GRR_%': [self.results[f]['GRR_percent'] for f in files]
+        })
+        
+        components_df.to_csv('variance_components_table.csv', index=False)
 
     def analyze_measurement_system(self, filepath):
         """Perform comprehensive measurement system analysis"""
@@ -425,6 +574,8 @@ class ComprehensiveMSA:
             data = self.load_data(filepath)
             
             print("\nCalculating all metrics...")
+            
+            # Calculate traditional metrics
             results = {
                 'discriminability': self.calculate_discriminability(data),
                 'fingerprint_index': self.calculate_fingerprint_index(data),
@@ -439,6 +590,19 @@ class ComprehensiveMSA:
             gage_results = self.calculate_gage_rnr(data)
             results.update(gage_results)
             
+            # Add new metrics
+            results['ccdm'] = self.calculate_ccdm(data)
+            
+            # Add components of variation
+            components = self.calculate_components_of_variation(data)
+            results.update(components)
+            
+            # Generate X-bar chart
+            self.generate_xbar_chart(data)
+            
+            # Visualize components of variation
+            self.visualize_components(data)
+            
             self.results[data['file_name']] = results
             
             print(f"\nResults for {data['file_name']}:")
@@ -448,6 +612,10 @@ class ComprehensiveMSA:
             print(f"Rank Sum: {results['rank_sum']:.4f}")
             print(f"ICC: {results['icc']:.4f}")
             print(f"ICC Interpretation: {self.get_icc_interpretation(results['icc'])}")
+            print(f"CCDM: {results['ccdm']:.4f}")
+            print("\nComponents of Variation:")
+            print(f"Between-parts: {results['percent_between']:.1f}%")
+            print(f"Within-parts: {results['percent_within']:.1f}%")
             print("\nGage R&R Results:")
             print(f"Repeatability (EV): {results['EV']:.6f} ({results['EV_percent']:.1f}%)")
             print(f"Reproducibility (AV): {results['AV']:.6f} ({results['AV_percent']:.1f}%)")
@@ -494,7 +662,8 @@ class ComprehensiveMSA:
             'Fingerprint': np.zeros(len(n_subjects)),
             'I2C2': np.zeros(len(n_subjects)),  # Added I2C2
             'ICC (F-test)': np.zeros(len(n_subjects)),
-            'ICC (permutation)': np.zeros(len(n_subjects))
+            'ICC (permutation)': np.zeros(len(n_subjects)),
+            'CCDM': np.zeros(len(n_subjects))  # Added CCDM
         }
         
         for i, n in enumerate(tqdm(n_subjects, desc="Simulating power curves")):
@@ -534,12 +703,14 @@ class ComprehensiveMSA:
                 f_index = self.calculate_fingerprint_index(sim_data)
                 i2c2 = self.calculate_i2c2(sim_data)  # Added I2C2 calculation
                 icc = self.calculate_icc(sim_data)
+                ccdm = self.calculate_ccdm(sim_data)  # Added CCDM calculation
                 
                 # Perform significance tests (α = 0.05)
                 significant_counts['Discriminability'] += (d_hat > 0.5)
                 significant_counts['Rank Sums'] += (rank_sum > 0.5)
                 significant_counts['Fingerprint'] += (f_index > 1/n)
                 significant_counts['I2C2'] += (i2c2 > 0.5)  # Added I2C2 threshold
+                significant_counts['CCDM'] += (ccdm < 0.5)  # Added CCDM threshold (lower is better)
                 
                 # F-test for ICC
                 f_stat = (1 + (n_variations-1)*icc)/(1-icc)
