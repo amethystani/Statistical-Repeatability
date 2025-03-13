@@ -25,6 +25,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
 from math import sqrt
+import io
+import sys
 
 warnings.filterwarnings('ignore')
 
@@ -77,8 +79,12 @@ class ComprehensiveMSA:
         batch_size = 25  # Reduced from 50
         n_batches = (n_parts + batch_size - 1) // batch_size
         
+        # Use a single line with counter instead of tqdm with multiple lines
+        print(f"Calculating discriminability...", end="", flush=True)
+        completed = 0
+        
         try:
-            for batch_idx in tqdm(range(n_batches), desc="Calculating discriminability", unit="batch"):
+            for batch_idx in range(n_batches):
                 start_idx = batch_idx * batch_size
                 end_idx = min((batch_idx + 1) * batch_size, n_parts)
                 batch_size_actual = end_idx - start_idx
@@ -109,9 +115,15 @@ class ComprehensiveMSA:
                 # Force garbage collection after each batch
                 import gc
                 gc.collect()
+                
+                # Update progress counter
+                completed += batch_size_actual
+                print(f"\rCalculating discriminability... {completed}/{n_parts} parts processed ({int(100*completed/n_parts)}%)", end="", flush=True)
+            
+            print()  # Final newline after completion
             
         except Exception as e:
-            print(f"Error during discriminability calculation: {str(e)}")
+            print(f"\nError during discriminability calculation: {str(e)}")
             raise
         finally:
             # Ensure proper cleanup
@@ -509,8 +521,15 @@ class ComprehensiveMSA:
                     'n_variations': n_variations
                 }
                 
-                # Calculate test statistics
-                d_hat = self.calculate_discriminability(sim_data)
+                # Calculate test statistics - redirect stdout to suppress output during discriminability calculation
+                original_stdout = sys.stdout
+                sys.stdout = io.StringIO()  # Redirect to dummy stream
+                try:
+                    d_hat = self.calculate_discriminability(sim_data)
+                finally:
+                    sys.stdout = original_stdout  # Restore stdout
+                
+                # Calculate other metrics normally
                 rank_sum = self.calculate_rank_sum(sim_data)
                 f_index = self.calculate_fingerprint_index(sim_data)
                 i2c2 = self.calculate_i2c2(sim_data)  # Added I2C2 calculation
