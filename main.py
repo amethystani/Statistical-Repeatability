@@ -719,24 +719,34 @@ class ComprehensiveMSA:
         # Table headers with clearer descriptions
         headers = [
             "Dataset",
-            "%Contribution\n(Variance Ratio)", 
-            "%Study Variation\n(StdDev Ratio)",
+            "%Contribution\\n(Variance Ratio)", 
+            "%Study Variation\\n(StdDev Ratio)",
             "NDC"
         ]
         
         # Build table data from results
         table_data = []
         for file_name, results in self.results.items():
-            # Calculate %Study variance correctly using standard deviations
-            # %Study variance = (GRR_std / Total_std) * 100
-            grr_std = np.sqrt(results['GRR'])  # Convert variance to std dev
-            total_std = np.sqrt(results['TV'])  # Total variance to std dev
-            study_variance = (grr_std / total_std) * 100 if total_std > 0 else 0
+            grr_std_dev = results['GRR']  # This is GRR standard deviation
+            tv_std_dev = results['TV']    # This is Total standard deviation
+            
+            # Calculate %Contribution (Variance Ratio)
+            # %Contribution = (GRR_variance / TV_variance) * 100
+            # Since results['GRR'] and results['TV'] are std_devs,
+            # GRR_variance = grr_std_dev**2 and TV_variance = tv_std_dev**2
+            if tv_std_dev > 1e-10:  # Avoid division by zero or issues with very small TV
+                contribution_percent = (grr_std_dev**2 / tv_std_dev**2) * 100
+            else:
+                contribution_percent = 0.0 # Or float('nan') if preferred for undefined cases
+            
+            # %Study Variation (StdDev Ratio) is already calculated and stored in results['GRR_percent']
+            # results['GRR_percent'] = (GRR_std_dev / TV_std_dev) * 100
+            study_variation_percent = results['GRR_percent']
             
             row = [
                 file_name,
-                f"{results['GRR_percent']:.2f}",  # %Contribution (correct)
-                f"{study_variance:.2f}",          # %Study variance (fixed)
+                f"{contribution_percent:.2f}",  # Corrected %Contribution
+                f"{study_variation_percent:.2f}",  # Corrected %Study Variation
                 f"{results['ndc']:.0f}"
             ]
             table_data.append(row)
