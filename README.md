@@ -1,51 +1,117 @@
-# Statistical-Repeatability-Analysis
+# Comprehensive Measurement System Analysis (MSA)
 
 ## Abstract
 
-This repository encompasses the full implementation of advanced statistical methodologies focused on quantifying and analyzing repeatability metrics within high-dimensional datasets. Grounded in the framework proposed by Zeyi Wang et al. (2020), the project uses discriminability measures, rank-based metrics, and permutation-driven hypothesis testing across diverse dataset configurations. The objective is to use systemic patterns in data reproducibility while optimizing preprocessing pipelines and benchmarking robustness under extreme conditions.
+This repository houses a robust implementation of advanced Measurement System Analysis (MSA) techniques designed to evaluate measurement reliability and repeatability in experimental datasets. Building upon established methodologies in metrology and expanding with novel statistical approaches, this framework provides comprehensive assessment of measurement systems through multiple complementary metrics. The implementation offers particular value for analyzing small-magnitude measurements with potential noise interference, such as those encountered in vibration analysis, material testing, and precision engineering applications.
 
----
+## Research Background
 
-## Scope of Work
+Reliable measurement processes are fundamental to scientific research and quality control in engineering disciplines. Traditional Gage R&R (Repeatability and Reproducibility) studies often fail to capture the full complexity of modern measurement systems, particularly when dealing with high-dimensional data or when assumptions of classical statistical methods are violated. This implementation draws inspiration from recent advances in statistical repeatability analysis, including the work of Koo & Li (2016) on ICC interpretation guidelines and emerging methodologies for discriminability and fingerprinting metrics.
 
-1. **Methodological Replication**: 
-   - Deploy rigorous statistical measures derived from multivariate and nonparametric methodologies.
-   - Validate the theoretical underpinnings of discriminability, fingerprinting, and rank sums in empirical contexts.
+## Implemented Methodologies
 
-2. **Metric Evaluation**:
-   - Examine interdependencies between repeatability statistics and their computational convergence properties.
-   - Explore boundary cases (e.g., Gaussian assumptions, batch effects).
+The framework implements seven distinct but complementary measurement system evaluation techniques:
 
-3. **Augmented Applications**:
-   - Extend statistical metrics to accommodate scaling challenges and batch-level data perturbations.
-   - Provide actionable insights for repeatability optimization in functional data pipelines.
+1. **Discriminability (D_hat)** - Probabilistic measure of a measurement system's ability to distinguish between different test specimens, calculated through pairwise comparison of within-subject and between-subject distances.
 
----
+2. **Fingerprint Index (F_index)** - Evaluates the uniqueness of measurement signatures across test specimens, providing insights into measurement system's identification capabilities.
 
-## Technical Implementations
+3. **I2C2 (Image Intraclass Correlation Coefficient)** - Specialized intraclass correlation metric designed for handling two-dimensional measurement data with spatial or temporal correlations.
 
-### 1. **Discriminability Analysis**
-The discriminability metric encapsulates a probabilistic framework for evaluating intersubject repeatability. Its computation leverages multi-level nested permutations and nonparametric rank assignments across multivariate embeddings. Specific emphasis is placed on resolving computational bottlenecks in \(O(n^3)\) scaling scenarios.
+4. **Rank Sum Statistic** - Non-parametric approach for assessing repeatability using rank-based methods, offering robustness against non-normal distributions.
 
-### 2. **Fingerprinting Metrics**
-Fingerprint indices operationalize a pairwise comparison methodology, emphasizing probabilistic alignment in subject-specific feature subspaces. Advanced matching heuristics ensure robustness to dimensionality reduction artifacts.
+5. **ICC (Intraclass Correlation Coefficient)** - Classical measure of reliability that quantifies the ratio of between-subject variance to total variance, with interpretative guidelines.
 
-### 3. **Rank-Based Summation Techniques**
-Rank sums are computed as ordinal transformations across subspaces defined by pairwise proximity matrices. This method introduces asymptotically unbiased estimators for batch-invariant evaluations.
+6. **CCDM (Correlation Coefficient Deviation Metric)** - Measures the consistency of correlation patterns across repeated measurements.
 
----
+7. **Components of Variation** - ANOVA-based decomposition of variance sources (within-part vs. between-part) to identify dominant error contributions.
 
+8. **X-bar Control Charts** - Statistical process control visualization for monitoring measurement stability across repetitions.
 
-![screenshot](analysis_icc_disc.png)
+## Visualization Capabilities
 
-## Repository Structure
+The implementation generates comprehensive visualizations that aid in interpreting measurement system performance:
 
-```plaintext
+<div align="center">
+    <img src="analysis_icc_disc.png" alt="ICC vs Discriminability Relationship" width="45%">
+    <img src="analysis_performance.png" alt="Method Performance Comparison" width="45%">
+    <p><em>Left: Theoretical and observed relationship between ICC and Discriminability metrics. Right: Performance comparison across different repeatability measures.</em></p>
+</div>
+
+<div align="center">
+    <img src="analysis_Project Details_xbar.png" alt="X-bar Control Chart" width="45%">
+    <img src="analysis_power_analysis.png" alt="Power Analysis" width="45%">
+    <p><em>Left: X-bar control chart showing measurement stability across repetitions. Right: Statistical power analysis for different measurement metrics under varying sample sizes.</em></p>
+</div>
+
+## Key Features
+
+- **Optimized Memory Management**: Implementation handles large datasets through batch processing and efficient memory allocation strategies.
+- **Numerical Stability**: Special handling for extremely small variations that could lead to floating-point precision issues.
+- **Comprehensive Reporting**: Detailed variance component analysis with standardized Gage R&R metrics (EV, AV, GRR, PV percentages).
+- **Multiple Visualization Options**: X-bar charts, variance component visualizations, power curves, and cross-metric relationship plots.
+- **Statistical Power Analysis**: Simulation-based assessment of each metric's sensitivity under different sample sizes and variance conditions.
+
+## Technical Details
+
+The framework employs one-way ANOVA models, Expected Mean Squares (EMS) for variance component estimation, control charting principles, and specialized distance-based metrics. The implementation provides robust handling of:
+
+- Datasets with extremely small variations
+- High-dimensional measurement spaces
+- Non-Gaussian measurement distributions
+- Multiple repetition configurations
+- Comparative assessment across different boundary conditions
+
+## Usage
+
+The analysis pipeline accepts Excel-formatted measurement data with the following structure:
+- First column: Frequency or sample identifier
+- Subsequent columns: Repeated measurements of the same characteristic
+
+```python
+# Example usage
+analyzer = ComprehensiveMSA()
+analyzer.analyze_measurement_system('Project Details.xlsx')
+analyzer.visualize_results()
+```
+
+## Results Interpretation
+
+The framework provides both numerical assessments and visual aids for interpretation:
+
+- **ICC Values & Interpretation**: < 0.5 (Poor), 0.5-0.75 (Moderate), 0.75-0.9 (Good), > 0.9 (Excellent)
+- **Gage R&R Guidelines**: < 10% (Excellent), 10-30% (Acceptable), > 30% (Unacceptable)
+- **Number of Distinct Categories (ndc)**: > 5 (Generally acceptable for measurement systems)
+
+## Data Requirements
+
+For optimal results, the measurement data should contain:
+- Sufficient number of test specimens (parts/frequencies) to capture part-to-part variation
+- Multiple repetitions per specimen to assess repeatability
+- Preferably consistent experimental conditions to isolate true measurement system variation
+
+## Project Structure
+
+```
 .
-├── data/                             # Raw dataset files
-├── src/
-│   ├── discriminability.py           # Discriminability implementation
-│   ├── fingerprinting.py             # Fingerprinting implementation
-│   ├── rank_sums.py                  # Rank sums implementation
-├── analysis_results/                 # Numerical results
-├── README.md            
+├── main.py                                # Main implementation file
+├── analysis_results/                      # Generated analysis outputs
+├── Project Details*.xlsx                  # Example measurement datasets
+├── Project Surface Bonded.xlsx            # Additional measurement dataset
+├── analysis_*.png                         # Generated visualizations
+├── variance_components_table.csv          # Summary of variance components
+└── README.md                              # This documentation
+```
+
+## Future Work
+
+- Implementation of multi-way ANOVA models for more complex experimental designs
+- Integration of machine learning approaches for outlier detection
+- Development of adaptive preprocessing techniques based on measurement characteristics
+- Extension to handle multivariate response variables
+
+## References
+
+- Koo, T. K., & Li, M. Y. (2016). A Guideline of Selecting and Reporting Intraclass Correlation Coefficients for Reliability Research. *Journal of Chiropractic Medicine*, 15(2), 155-163.
+- AIAG (2010). Measurement Systems Analysis Reference Manual, 4th edition.
+- Wheeler, D. J., & Lyday, R. W. (1989). Evaluating the Measurement Process, 2nd edition.
