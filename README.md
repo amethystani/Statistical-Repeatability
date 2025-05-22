@@ -33,16 +33,37 @@ The framework implements seven distinct but complementary measurement system eva
 The implementation generates comprehensive visualizations that aid in interpreting measurement system performance:
 
 <div align="center">
-    <img src="analysis_icc_disc.png" alt="ICC vs Discriminability Relationship" width="45%">
-    <img src="analysis_performance.png" alt="Method Performance Comparison" width="45%">
-    <p><em>Left: Theoretical and observed relationship between ICC and Discriminability metrics. Right: Performance comparison across different repeatability measures.</em></p>
+  <table border="0" cellspacing="0" cellpadding="0">
+    <tr>
+      <td align="center" width="50%">
+        <img src="analysis_icc_disc.png" alt="ICC vs Discriminability Relationship" width="100%">
+        <p><strong>Theoretical & Observed ICC-Discriminability Relationship</strong><br><em>Demonstrates the mathematical relationship between ICC and discriminability metrics with empirical validation points.</em></p>
+      </td>
+      <td align="center" width="50%">
+        <img src="analysis_performance.png" alt="Method Performance Comparison" width="100%">
+        <p><strong>Method Performance Comparison</strong><br><em>Visualizes the relative performance of different repeatability measures across datasets.</em></p>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" width="50%">
+        <img src="analysis_Project Details_xbar.png" alt="X-bar Control Chart" width="100%">
+        <p><strong>X-bar Control Chart</strong><br><em>Statistical process control visualization showing measurement stability across repetitions.</em></p>
+      </td>
+      <td align="center" width="50%">
+        <img src="analysis_power_analysis.png" alt="Power Analysis" width="100%">
+        <p><strong>Statistical Power Analysis</strong><br><em>Quantifies each metric's sensitivity under varying sample sizes and variance conditions.</em></p>
+      </td>
+    </tr>
+  </table>
 </div>
 
-<div align="center">
-    <img src="analysis_Project Details_xbar.png" alt="X-bar Control Chart" width="45%">
-    <img src="analysis_power_analysis.png" alt="Power Analysis" width="45%">
-    <p><em>Left: X-bar control chart showing measurement stability across repetitions. Right: Statistical power analysis for different measurement metrics under varying sample sizes.</em></p>
-</div>
+### Key Visualization Types
+
+* **Relationship Plots** - Visualize theoretical and empirical relationships between different repeatability metrics
+* **Control Charts** - Monitor measurement stability and identify potential outliers or trends
+* **Power Analysis Curves** - Determine optimal sample sizes for achieving statistical significance
+* **Variance Component Breakdowns** - Illustrate the relative contributions of different error sources
+* **Method Comparison Graphs** - Compare performance of different statistical approaches across datasets
 
 ## Key Features
 
